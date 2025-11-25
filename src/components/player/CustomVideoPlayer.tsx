@@ -59,8 +59,6 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             if (videoRef.current) {
                 const safeTime = Number.isFinite(time) ? time : 0;
 
-                console.log(`[Player] Requesting Seek to: ${safeTime}`);
-
                 // 1. PAUSE FIRST: Stabilizes the media engine before jumping
                 videoRef.current.pause();
                 if (audioRef.current) audioRef.current.pause();
@@ -166,13 +164,10 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
 
         // BROWSER SAYS: "I am starting to seek"
         const handleSeeking = () => {
-            console.log('[Native] Seeking started - Locking Updates');
             isSeekingRef.current = true;
         };
 
         const handleSeeked = () => {
-            console.log('[Native] Seek finished - Unlocking Updates');
-
             // 1. DO NOT Sync Audio here. 
             // Letting audio sync here often crashes the seek if audio isn't buffered.
 
