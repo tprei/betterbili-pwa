@@ -1,35 +1,46 @@
-
 import { useRef, useState } from 'react';
 import type { TouchEvent, MouseEvent } from 'react';
 import clsx from 'clsx';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, ArrowDown } from 'lucide-react';
 
 interface GestureTrackpadProps {
-    onSeek: (delta: number) => void;
+    onNextSentence?: () => void;
+    onPrevSentence?: () => void;
+    onAnalyze?: () => void;
     onTogglePlay: () => void;
     onLongPress: () => void;
     className?: string;
 }
 
-export default function GestureTrackpad({ onSeek, onTogglePlay, onLongPress, className }: GestureTrackpadProps) {
-    const [activeGesture, setActiveGesture] = useState<'none' | 'tap' | 'swipe' | 'hold'>('none');
-    const [swipeDelta, setSwipeDelta] = useState(0);
+export default function GestureTrackpad({
+    onNextSentence,
+    onPrevSentence,
+    onAnalyze,
+    onTogglePlay,
+    onLongPress,
+    className
+}: GestureTrackpadProps) {
+    const [activeGesture, setActiveGesture] = useState<'none' | 'tap' | 'swipe-h' | 'swipe-v' | 'hold'>('none');
+    const [swipeDeltaX, setSwipeDeltaX] = useState(0);
+    const [swipeDeltaY, setSwipeDeltaY] = useState(0);
 
     const touchStartX = useRef<number | null>(null);
+    const touchStartY = useRef<number | null>(null);
     const touchStartTime = useRef<number | null>(null);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isDragging = useRef(false);
 
     // Constants
-    // const TAP_THRESHOLD_MS = 200; // Unused
     const SWIPE_THRESHOLD_PX = 30;
     const LONG_PRESS_MS = 500;
 
-    const handleStart = (clientX: number) => {
+    const handleStart = (clientX: number, clientY: number) => {
         touchStartX.current = clientX;
+        touchStartY.current = clientY;
         touchStartTime.current = Date.now();
         isDragging.current = false;
-        setSwipeDelta(0);
+        setSwipeDeltaX(0);
+        setSwipeDeltaY(0);
         setActiveGesture('tap'); // Assume tap initially
 
         // Start long press timer
@@ -41,21 +52,35 @@ export default function GestureTrackpad({ onSeek, onTogglePlay, onLongPress, cla
         }, LONG_PRESS_MS);
     };
 
-    const handleMove = (clientX: number) => {
-        if (touchStartX.current === null) return;
+    const handleMove = (clientX: number, clientY: number) => {
+        if (touchStartX.current === null || touchStartY.current === null) return;
 
         const deltaX = clientX - touchStartX.current;
+        const deltaY = clientY - touchStartY.current;
 
-        if (Math.abs(deltaX) > SWIPE_THRESHOLD_PX) {
-            isDragging.current = true;
-            setActiveGesture('swipe');
-            setSwipeDelta(deltaX);
+        // Determine if dragging
+        if (!isDragging.current) {
+            if (Math.abs(deltaX) > SWIPE_THRESHOLD_PX || Math.abs(deltaY) > SWIPE_THRESHOLD_PX) {
+                isDragging.current = true;
 
-            // Cancel long press if we start swiping
-            if (longPressTimer.current) {
-                clearTimeout(longPressTimer.current);
-                longPressTimer.current = null;
+                // Determine direction (Horizontal vs Vertical)
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    setActiveGesture('swipe-h');
+                } else {
+                    setActiveGesture('swipe-v');
+                }
+
+                // Cancel long press if we start swiping
+                if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                }
             }
+        }
+
+        if (isDragging.current) {
+            setSwipeDeltaX(deltaX);
+            setSwipeDeltaY(deltaY);
         }
     };
 
@@ -65,12 +90,21 @@ export default function GestureTrackpad({ onSeek, onTogglePlay, onLongPress, cla
             longPressTimer.current = null;
         }
 
-        if (activeGesture === 'swipe') {
-            // Commit seek
-            // Map pixels to seconds (e.g., 10px = 1s)
-            const seekSeconds = Math.round(swipeDelta / 10);
-            if (seekSeconds !== 0) {
-                onSeek(seekSeconds);
+        if (activeGesture === 'swipe-h') {
+            // Horizontal Swipe Logic
+            // User Request: Swipe Left (negative delta) -> Previous
+            // User Request: Swipe Right (positive delta) -> Next
+            if (swipeDeltaX < -SWIPE_THRESHOLD_PX) {
+                onPrevSentence?.();
+            } else if (swipeDeltaX > SWIPE_THRESHOLD_PX) {
+                onNextSentence?.();
+            }
+        } else if (activeGesture === 'swipe-v') {
+            // Vertical Swipe Logic
+            // Swipe Down (positive delta) -> Analyze
+            // Ignore Swipe Up (negative delta)
+            if (swipeDeltaY > SWIPE_THRESHOLD_PX) {
+                onAnalyze?.();
             }
         } else if (activeGesture === 'tap' && !isDragging.current) {
             onTogglePlay();
@@ -78,21 +112,23 @@ export default function GestureTrackpad({ onSeek, onTogglePlay, onLongPress, cla
 
         // Reset
         touchStartX.current = null;
+        touchStartY.current = null;
         touchStartTime.current = null;
         setActiveGesture('none');
-        setSwipeDelta(0);
+        setSwipeDeltaX(0);
+        setSwipeDeltaY(0);
         isDragging.current = false;
     };
 
     // Touch Events
-    const onTouchStart = (e: TouchEvent) => handleStart(e.touches[0].clientX);
-    const onTouchMove = (e: TouchEvent) => handleMove(e.touches[0].clientX);
+    const onTouchStart = (e: TouchEvent) => handleStart(e.touches[0].clientX, e.touches[0].clientY);
+    const onTouchMove = (e: TouchEvent) => handleMove(e.touches[0].clientX, e.touches[0].clientY);
     const onTouchEnd = () => handleEnd();
 
     // Mouse Events (for desktop testing)
-    const onMouseDown = (e: MouseEvent) => handleStart(e.clientX);
+    const onMouseDown = (e: MouseEvent) => handleStart(e.clientX, e.clientY);
     const onMouseMove = (e: MouseEvent) => {
-        if (touchStartX.current !== null) handleMove(e.clientX);
+        if (touchStartX.current !== null) handleMove(e.clientX, e.clientY);
     };
     const onMouseUp = () => handleEnd();
     const onMouseLeave = () => {
@@ -130,16 +166,24 @@ export default function GestureTrackpad({ onSeek, onTogglePlay, onLongPress, cla
                     </div>
                 )}
 
-                {activeGesture === 'swipe' && (
+                {activeGesture === 'swipe-h' && (
                     <div className="flex items-center space-x-6 text-emerald-400 animate-in fade-in zoom-in duration-200">
-                        <ChevronLeft size={48} className={clsx("transition-opacity", swipeDelta < 0 ? "opacity-100" : "opacity-20")} />
+                        <ChevronLeft size={48} className={clsx("transition-opacity", swipeDeltaX < 0 ? "opacity-100" : "opacity-20")} />
                         <div className="flex flex-col items-center min-w-[80px]">
-                            <span className="text-4xl font-bold tracking-tighter tabular-nums">
-                                {Math.round(swipeDelta / 10) > 0 ? '+' : ''}{Math.round(swipeDelta / 10)}
+                            <span className="text-sm font-bold tracking-widest uppercase">
+                                {swipeDeltaX < 0 ? 'PREV' : 'NEXT'}
                             </span>
-                            <span className="text-xs font-medium uppercase tracking-widest opacity-80">Seconds</span>
                         </div>
-                        <ChevronRight size={48} className={clsx("transition-opacity", swipeDelta > 0 ? "opacity-100" : "opacity-20")} />
+                        <ChevronRight size={48} className={clsx("transition-opacity", swipeDeltaX > 0 ? "opacity-100" : "opacity-20")} />
+                    </div>
+                )}
+
+                {activeGesture === 'swipe-v' && swipeDeltaY > 0 && (
+                    <div className="flex flex-col items-center text-blue-400 animate-in fade-in zoom-in duration-200">
+                        <div className={clsx("transition-transform duration-200", swipeDeltaY > 0 ? "translate-y-2" : "")}>
+                            <ArrowDown size={48} />
+                        </div>
+                        <span className="mt-2 text-sm font-bold tracking-widest uppercase">Analyze</span>
                     </div>
                 )}
 
@@ -152,7 +196,7 @@ export default function GestureTrackpad({ onSeek, onTogglePlay, onLongPress, cla
                     </div>
                 )}
 
-                {activeGesture === 'tap' && !isDragging.current && (
+                {activeGesture === 'tap' && (
                     <div className="w-full h-full flex items-center justify-center animate-ping opacity-20">
                         <div className="w-20 h-20 bg-white/10 rounded-full" />
                     </div>

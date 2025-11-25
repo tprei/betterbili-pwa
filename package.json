@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.84.0",
     "clsx": "^2.1.1",
     "dashjs": "^5.1.0",
     "lucide-react": "^0.554.0",

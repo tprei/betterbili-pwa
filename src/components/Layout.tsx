@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, User, Film } from 'lucide-react';
+import { Home, User } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function Layout() {

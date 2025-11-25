@@ -193,6 +193,7 @@ class ASSParser {
         for (let i = 0; i < format.length && i < values.length; i++) {
             const formatKey = format[i];
             if (formatKey && values[i] !== undefined) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (style as any)[formatKey] = values[i]!.trim();
             }
         }
@@ -241,11 +242,13 @@ class ASSParser {
         for (let i = 0; i < format.length && i < values.length; i++) {
             const formatKey = format[i];
             if (formatKey && values[i] !== undefined) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (event as any)[formatKey] = values[i]!.trim();
             }
         }
 
         // Flexible field accessors (handle case/alias differences)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const getField = (obj: any, key: string, aliases: string[] = []): string | undefined => {
             if (obj[key] !== undefined) return obj[key];
             const lower = key.toLowerCase();
@@ -346,7 +349,7 @@ class ASSParser {
         let html = text;
 
         // Handle color tags
-        html = html.replace(/\{\\c&H([0-9A-Fa-f]{6,8})\}/g, (match, color) => {
+        html = html.replace(/\{\\c&H([0-9A-Fa-f]{6,8})\}/g, (_, color) => {
             const cssColor = this.assColorToCSS(`&H${color}`);
             return `<span style="color: ${cssColor};">`;
         });
@@ -438,6 +441,43 @@ class ASSParser {
             duration: duration,
             parsed: this.parsed
         };
+    }
+    /**
+     * Get the start time of the next dialogue event relative to current time
+     * @param currentTime - Current video time in seconds
+     * @returns Start time of next event or null if none
+     */
+    getNextEventTime(currentTime: number): number | null {
+        if (!this.parsed) return null;
+
+        // Find the first event that starts after the current time + buffer
+        // Buffer prevents getting the same event if we're slightly off
+        const buffer = 0.1;
+        const nextEvent = this.events.find(e => (e.startTime || 0) > currentTime + buffer);
+
+        return nextEvent ? nextEvent.startTime : null;
+    }
+
+    /**
+     * Get the start time of the previous dialogue event relative to current time
+     * @param currentTime - Current video time in seconds
+     * @returns Start time of previous event or null if none
+     */
+    getPrevEventTime(currentTime: number): number | null {
+        if (!this.parsed) return null;
+
+        // Find the last event that starts before the current time - buffer
+        const buffer = 0.5; // Larger buffer for prev to avoid jumping to start of current
+
+        // Iterate backwards
+        for (let i = this.events.length - 1; i >= 0; i--) {
+            const event = this.events[i];
+            if ((event.startTime || 0) < currentTime - buffer) {
+                return event.startTime;
+            }
+        }
+
+        return 0; // Return to start if no prev event
     }
 }
 

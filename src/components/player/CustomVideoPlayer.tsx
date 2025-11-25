@@ -1,39 +1,60 @@
-
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 
+export interface CustomVideoPlayerRef {
+    play: () => Promise<void>;
+    pause: () => void;
+    currentTime: number;
+}
+
 interface CustomVideoPlayerProps {
-    videoUrl: string;
+    src: string; // Changed from videoUrl to src to match standard video props
     onTimeUpdate?: (time: number) => void;
     onDurationChange?: (duration: number) => void;
-    onPlayStateChange?: (isPlaying: boolean) => void;
-    command?: { type: 'play' | 'pause' | 'seek', value?: number } | null;
-    onCommandHandled?: () => void;
+    onPlay?: () => void;
+    onPause?: () => void;
     className?: string;
 }
 
-export default function CustomVideoPlayer({
-    videoUrl,
+const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProps>(({
+    src,
     onTimeUpdate,
     onDurationChange,
-    onPlayStateChange,
-    command,
-    onCommandHandled,
+    onPlay,
+    onPause,
     className
-}: CustomVideoPlayerProps) {
+}, ref) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
     const [videoStreamUrl, setVideoStreamUrl] = useState<string | null>(null);
     const [audioStreamUrl, setAudioStreamUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
 
-    // Sync play state to parent
-    useEffect(() => {
-        onPlayStateChange?.(isPlaying);
-    }, [isPlaying, onPlayStateChange]);
+    useImperativeHandle(ref, () => ({
+        play: async () => {
+            if (videoRef.current) {
+                await videoRef.current.play();
+                if (audioRef.current) await audioRef.current.play();
+            }
+        },
+        pause: () => {
+            if (videoRef.current) {
+                videoRef.current.pause();
+                if (audioRef.current) audioRef.current.pause();
+            }
+        },
+        get currentTime() {
+            return videoRef.current?.currentTime || 0;
+        },
+        set currentTime(time: number) {
+            if (videoRef.current) {
+                videoRef.current.currentTime = time;
+                if (audioRef.current) audioRef.current.currentTime = time;
+            }
+        }
+    }));
 
     // Fetch the stream URLs from backend
     useEffect(() => {
@@ -44,14 +65,10 @@ export default function CustomVideoPlayer({
                 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
                 // 1. Get the stream URL
-                const response = await fetch(`${apiUrl}/api/v1/video/stream?url=${encodeURIComponent(videoUrl)}`);
+                const response = await fetch(src);
                 if (!response.ok) throw new Error('Failed to fetch video stream');
 
                 const data = await response.json();
-
-                // 2. Construct proxy URLs
-                // We need to proxy the stream to bypass Referer checks if the browser enforces them strictly on <video>
-                // The backend provides a proxy endpoint: /api/v1/video/proxy?url=...
 
                 if (data.video_url) {
                     const proxyVideoUrl = `${apiUrl}/api/v1/video/proxy?url=${encodeURIComponent(data.video_url)}`;
@@ -73,41 +90,10 @@ export default function CustomVideoPlayer({
             }
         };
 
-        if (videoUrl) {
+        if (src) {
             fetchStream();
         }
-    }, [videoUrl]);
-
-    // Handle external commands
-    useEffect(() => {
-        if (!command || !videoRef.current) return;
-
-        switch (command.type) {
-            case 'play':
-                videoRef.current.play().catch(console.error);
-                if (audioRef.current) audioRef.current.play().catch(console.error);
-                break;
-            case 'pause':
-                videoRef.current.pause();
-                if (audioRef.current) audioRef.current.pause();
-                break;
-            case 'seek':
-                if (command.value !== undefined) {
-                    // If value is small (like +/- 10), treat as delta? 
-                    // No, the contract in Watch.tsx was delta, but we should probably normalize to absolute time here or there.
-                    // Watch.tsx sends delta. Let's fix Watch.tsx to send absolute or handle delta here.
-                    // Actually, let's assume command.value is ABSOLUTE time for 'seek'.
-                    // If Watch.tsx sends delta, it should calculate absolute before sending.
-                    // Wait, Watch.tsx `handleSeek` was sending delta. We need to fix that.
-
-                    // For now, let's assume the command value IS the target time.
-                    videoRef.current.currentTime = command.value;
-                    if (audioRef.current) audioRef.current.currentTime = command.value;
-                }
-                break;
-        }
-        onCommandHandled?.();
-    }, [command, onCommandHandled]);
+    }, [src]);
 
     // Sync Audio/Video
     const togglePlay = () => {
@@ -140,29 +126,32 @@ export default function CustomVideoPlayer({
         }
     };
 
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-
     // Effect to bind audio play/pause to video if not done via toggle
     useEffect(() => {
         const video = videoRef.current;
         const audio = audioRef.current;
         if (!video || !audio) return;
 
-        const onPlay = () => audio.play().catch(console.error);
-        const onPause = () => audio.pause();
+        const onPlayEvent = () => {
+            audio.play().catch(console.error);
+            onPlay?.();
+        };
+        const onPauseEvent = () => {
+            audio.pause();
+            onPause?.();
+        };
         const onSeeking = () => { audio.currentTime = video.currentTime; };
 
-        video.addEventListener('play', onPlay);
-        video.addEventListener('pause', onPause);
+        video.addEventListener('play', onPlayEvent);
+        video.addEventListener('pause', onPauseEvent);
         video.addEventListener('seeking', onSeeking);
 
         return () => {
-            video.removeEventListener('play', onPlay);
-            video.removeEventListener('pause', onPause);
+            video.removeEventListener('play', onPlayEvent);
+            video.removeEventListener('pause', onPauseEvent);
             video.removeEventListener('seeking', onSeeking);
         };
-    }, [audioStreamUrl]);
+    }, [audioStreamUrl, onPlay, onPause]);
 
     return (
         <div className={clsx("relative bg-black w-full h-full flex items-center justify-center overflow-hidden", className)}>
@@ -195,8 +184,6 @@ export default function CustomVideoPlayer({
                     onClick={togglePlay}
                     onTimeUpdate={handleTimeUpdate}
                     onDurationChange={handleDurationChange}
-                    onPlay={handlePlay}
-                    onPause={handlePause}
                     muted={!!audioStreamUrl}
                 />
             )}
@@ -208,8 +195,9 @@ export default function CustomVideoPlayer({
                     className="hidden"
                 />
             )}
-            {/* Simple Overlay Controls for testing */}
-
         </div>
     );
-}
+});
+
+CustomVideoPlayer.displayName = 'CustomVideoPlayer';
+export default CustomVideoPlayer;

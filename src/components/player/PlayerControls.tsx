@@ -1,10 +1,11 @@
-import { Volume2, Info } from 'lucide-react';
+import { Volume2, Info, Timer } from 'lucide-react';
 import clsx from 'clsx';
 
 interface PlayerControlsProps {
     currentTime: number;
     duration: number; // In seconds
     onSeek: (time: number) => void;
+    onSyncClick?: () => void;
     className?: string;
 }
 
@@ -12,6 +13,7 @@ export default function PlayerControls({
     currentTime,
     duration,
     onSeek,
+    onSyncClick,
     className
 }: PlayerControlsProps) {
     const formatTime = (seconds: number) => {
@@ -55,6 +57,13 @@ export default function PlayerControls({
 
                 {/* Right Side Actions */}
                 <div className="flex items-center space-x-3">
+                    <button
+                        onClick={onSyncClick}
+                        className="p-2 text-zinc-400 hover:text-white transition-colors"
+                        aria-label="Subtitle Sync"
+                    >
+                        <Timer size={18} />
+                    </button>
                     <button
                         className="p-2 text-zinc-400 hover:text-white transition-colors"
                         aria-label="Audio Settings"

@@ -1,33 +1,35 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import WatchPage from './pages/Watch';
-
-// Placeholder pages
-const HomePage = () => (
-  <div className="p-4">
-    <h1 className="text-2xl font-bold mb-4">Catalog</h1>
-    <p className="text-zinc-400">Video catalog will appear here.</p>
-  </div>
-);
-
-const ProfilePage = () => (
-  <div className="p-4">
-    <h1 className="text-2xl font-bold mb-4">Profile</h1>
-    <p className="text-zinc-400">User stats will appear here.</p>
-  </div>
-);
+import HomePage from './pages/Home';
+import ProfilePage from './pages/Profile';
+import LoginPage from './pages/Login';
+import AuthCallback from './pages/AuthCallback';
+import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/watch/:hash" element={<WatchPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/watch/:hash" element={<WatchPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
