@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import CustomVideoPlayer from '../components/player/CustomVideoPlayer';
 import type { CustomVideoPlayerRef } from '../components/player/CustomVideoPlayer';
@@ -7,10 +7,14 @@ import GestureTrackpad from '../components/player/GestureTrackpad';
 import PlayerControls from '../components/player/PlayerControls';
 import ASSParser from '../lib/ass-parser';
 import clsx from 'clsx';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function WatchPage() {
   const { hash } = useParams();
+  const location = useLocation();
+  const videoUrl = (location.state as { videoUrl?: string })?.videoUrl;
   const videoHash = hash; // Alias for clarity
+  const { session } = useAuth();
 
   const playerRef = useRef<CustomVideoPlayerRef>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -21,44 +25,40 @@ export default function WatchPage() {
   const [subtitleOffset, setSubtitleOffset] = useState(0);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
-  // Load subtitles (Mock for now)
+  // Load subtitles from API
   useEffect(() => {
     const loadSubtitles = async () => {
-      // In real app: fetch from /api/v1/subtitles/{hash}/raw
-      // For now, let's create a dummy parser
-      const p = new ASSParser();
-      // Mock ASS content
-      const mockAss = `
-[Script Info]
-Title: Test Subtitles
-ScriptType: v4.00+
+      if (!videoHash) return;
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Hanzi, Arial, 20, &H00FFFFFF, &H000000FF, &H00000000, &H00000000, 0, 0, 0, 0, 100, 100, 0, 0, 1, 2, 2, 2, 10, 10, 10, 1
-Style: Pinyin, Arial, 14, &H0000FF00, &H000000FF, &H00000000, &H00000000, 0, 0, 0, 0, 100, 100, 0, 0, 1, 2, 2, 2, 10, 10, 10, 1
-Style: English, Arial, 14, &H00CCCCCC, &H000000FF, &H00000000, &H00000000, 0, 0, 0, 0, 100, 100, 0, 0, 1, 2, 2, 2, 10, 10, 10, 1
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || '/api/v1';
+        const headers: Record<string, string> = {};
 
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0, 0:00:01.00, 0:00:05.00, Hanzi,, 0, 0, 0,, 你好，世界！
-Dialogue: 0, 0:00:01.00, 0:00:05.00, Pinyin,, 0, 0, 0,, Nǐ hǎo, shìjiè!
-Dialogue: 0, 0:00:01.00, 0:00:05.00, English,, 0, 0, 0,, Hello, World!
-Dialogue: 0, 0:00:06.00, 0:00:10.00, Hanzi,, 0, 0, 0,, 这是一个测试。
-Dialogue: 0, 0:00:06.00, 0:00:10.00, Pinyin,, 0, 0, 0,, Zhè shì yīgè cèshì.
-Dialogue: 0, 0:00:06.00, 0:00:10.00, English,, 0, 0, 0,, This is a test.
-Dialogue: 0, 0:00:11.00, 0:00:15.00, Hanzi,, 0, 0, 0,, 今天天气不错。
-Dialogue: 0, 0:00:11.00, 0:00:15.00, Pinyin,, 0, 0, 0,, Jīntiān tiānqì bùcuò.
-Dialogue: 0, 0:00:11.00, 0:00:15.00, English,, 0, 0, 0,, The weather is nice today.
-Dialogue: 0, 0:00:16.00, 0:00:20.00, Hanzi,, 0, 0, 0,, 我们去公园吧。
-Dialogue: 0, 0:00:16.00, 0:00:20.00, Pinyin,, 0, 0, 0,, Wǒmen qù gōngyuán ba.
-Dialogue: 0, 0:00:16.00, 0:00:20.00, English,, 0, 0, 0,, Let's go to the park.
-`;
-      p.parse(mockAss);
-      setParser(p);
+        // Add auth token if available
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const response = await fetch(`${apiUrl}/subtitles/${videoHash}/raw`, {
+          headers
+        });
+
+        if (!response.ok) {
+          console.warn('Failed to fetch subtitles:', response.status);
+          return;
+        }
+
+        const assContent = await response.text();
+        const p = new ASSParser();
+        p.parse(assContent);
+        setParser(p);
+      } catch (error) {
+        console.error('Error loading subtitles:', error);
+      }
     };
+
     loadSubtitles();
-  }, []);
+  }, [videoHash, session]);
 
   const handleSeek = (time: number, relative: boolean = false) => {
     if (playerRef.current) {
@@ -202,7 +202,7 @@ Dialogue: 0, 0:00:16.00, 0:00:20.00, English,, 0, 0, 0,, Let's go to the park.
             <div className="w-full aspect-video landscape:aspect-auto landscape:h-full relative">
               <CustomVideoPlayer
                 ref={playerRef}
-                src={`http://localhost:5173/api/v1/videos/${videoHash}/stream`}
+                src={videoUrl ? `${import.meta.env.VITE_API_URL || '/api/v1'}/video/stream?url=${encodeURIComponent(videoUrl)}` : ''}
                 className="w-full h-full object-contain max-h-[60vh] landscape:max-h-full"
                 onTimeUpdate={setCurrentTime}
                 onDurationChange={setDuration}

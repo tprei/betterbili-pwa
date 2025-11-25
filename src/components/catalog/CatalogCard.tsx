@@ -132,7 +132,7 @@ export const CatalogCard = ({ item }: CatalogCardProps) => {
     const watchUrl = `/watch/${item.video_hash}`;
 
     return (
-        <Link to={watchUrl} className="block group">
+        <Link to={watchUrl} state={{ videoUrl: item.video_url }} className="block group">
             <div
                 className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden transition-all duration-200 hover:shadow-xl hover:border-zinc-700 hover:scale-[1.02] flex flex-col h-full"
             >

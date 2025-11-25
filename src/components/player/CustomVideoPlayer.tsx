@@ -71,12 +71,12 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 const data = await response.json();
 
                 if (data.video_url) {
-                    const proxyVideoUrl = `${apiUrl}/api/v1/video/proxy?url=${encodeURIComponent(data.video_url)}`;
+                    const proxyVideoUrl = `${apiUrl}/video/proxy?url=${encodeURIComponent(data.video_url)}`;
                     setVideoStreamUrl(proxyVideoUrl);
                 }
 
                 if (data.audio_url) {
-                    const proxyAudioUrl = `${apiUrl}/api/v1/video/proxy?url=${encodeURIComponent(data.audio_url)}`;
+                    const proxyAudioUrl = `${apiUrl}/video/proxy?url=${encodeURIComponent(data.audio_url)}`;
                     setAudioStreamUrl(proxyAudioUrl);
                 } else {
                     setAudioStreamUrl(null);

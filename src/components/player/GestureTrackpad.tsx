@@ -29,10 +29,12 @@ export default function GestureTrackpad({
     const touchStartTime = useRef<number | null>(null);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isDragging = useRef(false);
+    const lastTapTime = useRef<number>(0);
 
     // Constants
     const SWIPE_THRESHOLD_PX = 30;
     const LONG_PRESS_MS = 500;
+    const TAP_DEBOUNCE_MS = 300; // Prevent rapid taps
 
     const handleStart = (clientX: number, clientY: number) => {
         touchStartX.current = clientX;
@@ -107,7 +109,12 @@ export default function GestureTrackpad({
                 onAnalyze?.();
             }
         } else if (activeGesture === 'tap' && !isDragging.current) {
-            onTogglePlay();
+            // Debounce taps to prevent rapid pause/unpause
+            const now = Date.now();
+            if (now - lastTapTime.current > TAP_DEBOUNCE_MS) {
+                lastTapTime.current = now;
+                onTogglePlay();
+            }
         }
 
         // Reset
