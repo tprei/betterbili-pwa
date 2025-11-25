@@ -17,6 +17,8 @@ export default function WatchPage() {
   const { session } = useAuth();
 
   const playerRef = useRef<CustomVideoPlayerRef>(null);
+  const isGestureProcessing = useRef(false); // Debounce gestures
+
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -51,6 +53,7 @@ export default function WatchPage() {
         const assContent = await response.text();
         const p = new ASSParser();
         p.parse(assContent);
+        console.log('ASS parsed?', p.getStats());
         setParser(p);
       } catch (error) {
         console.error('Error loading subtitles:', error);
@@ -60,40 +63,87 @@ export default function WatchPage() {
     loadSubtitles();
   }, [videoHash, session]);
 
-  const handleSeek = (time: number, relative: boolean = false) => {
-    if (playerRef.current) {
-      const newTime = relative ? playerRef.current.currentTime + time : time;
-      playerRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
-      setXRayContent(null); // Clear X-Ray on seek
-    }
+  // Helper to handle seek + play sequence
+  const executeSeekAndPlay = (time: number) => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    // Optimistic UI update
+    setCurrentTime(time);
+    setXRayContent(null);
+
+    // Perform Seek (The player will pause internally first)
+    player.seek(time);
+
+    // Force play after a short delay to ensure seek has registered
+    setTimeout(() => {
+      player.play();
+      setIsPlaying(true);
+    }, 100);
+  };
+
+  const handleSeek = (time: number, relative = false) => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    const current = player.getCurrentTime();
+    const newTime = relative ? current + time : time;
+
+    player.seek(newTime);
+    setCurrentTime(newTime);
+    setXRayContent(null);
   };
 
   const handleNextSentence = () => {
-    if (parser && playerRef.current) {
-      // Find next event relative to the *displayed* subtitle time
-      const queryTime = playerRef.current.currentTime - subtitleOffset;
-      const nextTime = parser.getNextEventTime(queryTime);
-      if (nextTime !== null) {
-        // Seek to when that event *should* appear
-        const seekTime = nextTime + subtitleOffset;
-        playerRef.current.currentTime = seekTime;
-        setCurrentTime(seekTime);
-        setXRayContent(null);
-      }
+    // Debounce: If we just swiped, ignore for 300ms
+    if (isGestureProcessing.current || !parser || !playerRef.current) return;
+    isGestureProcessing.current = true;
+    setTimeout(() => isGestureProcessing.current = false, 300);
+
+    const player = playerRef.current;
+    const currentVideoTime = player.getCurrentTime();
+    const queryTime = currentVideoTime - subtitleOffset;
+
+    const nextTime = parser.getNextEventTime(queryTime);
+
+    if (nextTime !== null) {
+      // 0.01s buffer
+      const seekTime = nextTime + subtitleOffset + 0.01;
+      executeSeekAndPlay(seekTime);
     }
   };
 
   const handlePrevSentence = () => {
-    if (parser && playerRef.current) {
-      const queryTime = playerRef.current.currentTime - subtitleOffset;
-      const prevTime = parser.getPrevEventTime(queryTime);
-      if (prevTime !== null) {
-        const seekTime = prevTime + subtitleOffset;
-        playerRef.current.currentTime = seekTime;
-        setCurrentTime(seekTime);
-        setXRayContent(null);
+    // Debounce
+    if (isGestureProcessing.current || !parser || !playerRef.current) return;
+    isGestureProcessing.current = true;
+    setTimeout(() => isGestureProcessing.current = false, 300);
+
+    const player = playerRef.current;
+    const currentVideoTime = player.getCurrentTime();
+    const queryTime = currentVideoTime - subtitleOffset;
+
+    const activeSubs = parser.getActiveSubtitles(queryTime);
+    const currentSub = activeSubs.length > 0
+      ? activeSubs.sort((a, b) => (b.startTime || 0) - (a.startTime || 0))[0]
+      : null;
+
+    // Restart logic (>0.2s in)
+    if (currentSub && currentSub.startTime !== null) {
+      if (queryTime - currentSub.startTime > 0.2) {
+        const seekTime = currentSub.startTime + subtitleOffset;
+        executeSeekAndPlay(seekTime);
+        return;
       }
+    }
+
+    // Prev logic
+    const prevTime = parser.getPrevEventTime(queryTime);
+    if (prevTime !== null) {
+      const seekTime = prevTime + subtitleOffset;
+      executeSeekAndPlay(seekTime);
+    } else {
+      executeSeekAndPlay(0);
     }
   };
 

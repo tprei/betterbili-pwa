@@ -184,9 +184,11 @@ class ASSParser {
      * Parse style definition
      */
     private parseStyle(line: string, format: string[]): void {
-        // Remove "Style: " prefix (7 characters)
-        if (!line.startsWith('Style: ')) return;
-        const stylePart = line.substring(7);
+        // Match "Style:" with any amount of spaces, any casing
+        const match = line.match(/^Style\s*:\s*(.*)$/i);
+        if (!match) return;
+
+        const stylePart = match[1]; // everything after "Style:"
         const values = stylePart.split(',');
 
         const style: Partial<ASSStyle> = {};
@@ -199,16 +201,12 @@ class ASSParser {
         }
 
         if (style.Name) {
-            // Convert ASS color format (&HAABBGGRR) to CSS
             if (style.PrimaryColour) {
                 style.cssColor = this.assColorToCSS(style.PrimaryColour);
             }
-
-            // Convert font size
             if (style.Fontsize) {
                 style.cssFontSize = `${style.Fontsize}px`;
             }
-
             this.styles.set(style.Name, style as ASSStyle);
         }
     }
@@ -217,11 +215,13 @@ class ASSParser {
      * Parse dialogue event
      */
     private parseEvent(line: string, format: string[]): void {
-        // Remove "Dialogue: " prefix (9 characters)
-        if (!line.startsWith('Dialogue: ')) return;
-        const eventPart = line.substring(10);
+        // Match "Dialogue:" with flexible spacing/casing
+        const match = line.match(/^Dialogue\s*:\s*(.*)$/i);
+        if (!match) return;
 
-        // Robust split: keep commas inside the last field (usually Text)
+        const eventPart = match[1]; // everything after "Dialogue:"
+
+        // Robust split: keep commas inside the last field (Text)
         const values: string[] = [];
         if (format && format.length > 0) {
             const wanted = format.length;
@@ -230,10 +230,8 @@ class ASSParser {
                 for (let i = 0; i < wanted - 1; i++) {
                     values.push(raw[i]!);
                 }
-                // Join the remainder as last field
-                values.push(raw.slice(wanted - 1).join(','));
+                values.push(raw.slice(wanted - 1).join(',')); // rest is Text
             } else {
-                // Fallback: use what we have
                 for (let i = 0; i < raw.length; i++) values.push(raw[i]!);
             }
         }
@@ -247,7 +245,7 @@ class ASSParser {
             }
         }
 
-        // Flexible field accessors (handle case/alias differences)
+        // Flexible field accessor
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const getField = (obj: any, key: string, aliases: string[] = []): string | undefined => {
             if (obj[key] !== undefined) return obj[key];
@@ -285,27 +283,31 @@ class ASSParser {
     }
 
     /**
-     * Parse ASS timestamp (H:MM:SS.CC) to seconds
+     * Parse ASS timestamp to seconds
+     * Supports: H:MM:SS, H:MM:SS.xx, MM:SS, MM:SS.xx
+     * Allows both . and , as decimal separators
      */
     private parseTimestamp(timestamp: string): number | null {
         try {
-            // Support fractional seconds with 1-3 digits (e.g., .2, .23, .234)
-            const match = timestamp.match(/^(\d+):(\d{2}):(\d{2})\.(\d{1,3})$/);
+            // Allow optional hours, flexible decimal separator
+            const match = timestamp.match(
+                /^(?:(\d+):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?$/
+            );
             if (!match) return null;
 
             const [, hours, minutes, seconds, fraction] = match;
-            const h = parseInt(hours!);
+            const h = hours ? parseInt(hours) : 0;
             const m = parseInt(minutes!);
             const s = parseInt(seconds!);
-            const frac = String(fraction!);
+
             let fracSeconds = 0;
-            if (frac.length === 3) {
-                fracSeconds = parseInt(frac) / 1000;
-            } else if (frac.length === 2) {
-                fracSeconds = parseInt(frac) / 100;
-            } else if (frac.length === 1) {
-                fracSeconds = parseInt(frac) / 10;
+            if (fraction) {
+                const frac = String(fraction);
+                if (frac.length === 3) fracSeconds = parseInt(frac) / 1000;
+                else if (frac.length === 2) fracSeconds = parseInt(frac) / 100;
+                else if (frac.length === 1) fracSeconds = parseInt(frac) / 10;
             }
+
             return h * 3600 + m * 60 + s + fracSeconds;
         } catch {
             return null;
@@ -448,11 +450,11 @@ class ASSParser {
      * @returns Start time of next event or null if none
      */
     getNextEventTime(currentTime: number): number | null {
-        if (!this.parsed) return null;
+        if (!this.parsed || this.events.length === 0) return null;
 
         // Find the first event that starts after the current time + buffer
         // Buffer prevents getting the same event if we're slightly off
-        const buffer = 0.1;
+        const buffer = 0.05;
         const nextEvent = this.events.find(e => (e.startTime || 0) > currentTime + buffer);
 
         return nextEvent ? nextEvent.startTime : null;
@@ -464,10 +466,10 @@ class ASSParser {
      * @returns Start time of previous event or null if none
      */
     getPrevEventTime(currentTime: number): number | null {
-        if (!this.parsed) return null;
+        if (!this.parsed || this.events.length === 0) return null;
 
         // Find the last event that starts before the current time - buffer
-        const buffer = 0.5; // Larger buffer for prev to avoid jumping to start of current
+        const buffer = 0.05;
 
         // Iterate backwards
         for (let i = this.events.length - 1; i >= 0; i--) {
@@ -477,7 +479,8 @@ class ASSParser {
             }
         }
 
-        return 0; // Return to start if no prev event
+        // No previous event → signal "nothing" instead of forcing ts 0
+        return null;
     }
 }
 
