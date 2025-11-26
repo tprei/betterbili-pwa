@@ -73,14 +73,14 @@ export default function PlayerControls({
                 <div className="flex items-center space-x-1">
                     <button
                         onClick={onSyncClick}
-                        className="p-2 text-zinc-400 hover:text-white transition-colors"
+                        className="p-2 text-zinc-400 hover:text-white transition-colors hidden landscape:block"
                         aria-label="Subtitle Sync"
                     >
                         <Timer size={18} />
                     </button>
                     <button
                         onClick={onAppearanceClick}
-                        className="p-2 text-zinc-400 hover:text-white transition-colors"
+                        className="p-2 text-zinc-400 hover:text-white transition-colors hidden landscape:block"
                         aria-label="Subtitle Appearance"
                     >
                         <Settings2 size={18} />

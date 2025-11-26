@@ -8,7 +8,6 @@ interface SubtitleDisplayProps {
     currentTime: number;
     className?: string;
     onCharacterSelect?: (char: string) => void;
-    // Removed isPaused prop as we want selection to work always
     scale?: number;
     verticalOffset?: number;
     backgroundMode?: 'none' | 'blur' | 'opaque';
@@ -33,7 +32,6 @@ export default function SubtitleDisplay({
     // Drag Selection State
     const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
     const isSelecting = useRef(false);
-    // const containerRef = useRef<HTMLDivElement>(null); // Removed as per diff
 
     // Reset selection when subtitles change
     useEffect(() => {
@@ -42,23 +40,29 @@ export default function SubtitleDisplay({
 
     if (!parser || !parser.isReady()) return null;
 
-    const handlePointerDown = (index: number) => {
+    // 1. Pointer Down: Start Selection
+    const handlePointerDown = (index: number, e: React.PointerEvent) => {
         if (!onCharacterSelect) return;
+        // Prevent default to stop scrolling/selection of page
+        // e.preventDefault(); 
+        // Explicit capture isn't always needed if we rely on Enter events, 
+        // but releasing it ensures we don't get stuck on one element if we use Enter events
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+
         isSelecting.current = true;
         setSelection({ start: index, end: index });
     };
 
-    const handlePointerMove = (e: React.PointerEvent) => {
-        if (!isSelecting.current || !e.currentTarget) return;
-
-        // Find the element under the pointer
-        const target = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-        if (target && target.dataset.charIndex) {
-            const index = parseInt(target.dataset.charIndex, 10);
-            setSelection(prev => prev ? { ...prev, end: index } : null); // This line changed as per diff
+    // 2. Pointer Enter: Update Selection (Works better than Move for discrete items)
+    const handlePointerEnter = (index: number) => {
+        if (isSelecting.current) {
+            setSelection(prev => prev ? { ...prev, end: index } : null);
         }
     };
 
+    // 3. Pointer Up: Commit Selection
     const handlePointerUp = (fullText: string) => {
         if (!isSelecting.current || !selection || !onCharacterSelect) return;
         isSelecting.current = false;
@@ -116,7 +120,7 @@ export default function SubtitleDisplay({
         k => k !== hanziKey && k !== pinyinKey && k !== englishKey
     );
 
-    // ---------- BASIC LINE RENDERER (for English / fallback) ----------
+    // ---------- BASIC LINE RENDERER ----------
     const renderSubtitleLine = (styleName: string, events: ASSEvent[]) => {
         if (!events.length) return null;
 
@@ -135,7 +139,7 @@ export default function SubtitleDisplay({
 
         const isHanzi = type === 'hanzi';
 
-        // If it's Hanzi, split into clickable/draggable characters (fallback when not in ruby mode)
+        // If it's Hanzi, split into clickable/draggable characters
         if (isHanzi && onCharacterSelect) {
             const textForSelection = text;
 
@@ -146,9 +150,10 @@ export default function SubtitleDisplay({
                         'text-center transition-all duration-300 animate-in fade-in slide-in-from-bottom-1 touch-none select-none',
                         styleClass
                     )}
-                    onPointerMove={handlePointerMove}
+                    // We attach PointerUp to container to catch release outside of spans
                     onPointerUp={() => handlePointerUp(textForSelection)}
                     onPointerLeave={() => {
+                        // Optional: Commit if dragged out of the container
                         if (isSelecting.current) handlePointerUp(textForSelection);
                     }}
                 >
@@ -161,17 +166,14 @@ export default function SubtitleDisplay({
                         return (
                             <span
                                 key={i}
-                                data-char-index={i}
-                                onPointerDown={e => {
-                                    e.currentTarget.releasePointerCapture(e.pointerId);
-                                    handlePointerDown(i);
-                                }}
                                 className={clsx(
-                                    'cursor-pointer inline-block transition-all duration-150 px-1 rounded',
+                                    'cursor-pointer inline-block transition-all duration-150 px-1 rounded touch-none',
                                     isSelected
                                         ? 'bg-emerald-500/30 text-emerald-300 scale-110'
-                                        : 'hover:bg-white/10 active:scale-95'
+                                        : 'active:scale-95'
                                 )}
+                                onPointerDown={(e) => handlePointerDown(i, e)}
+                                onPointerEnter={() => handlePointerEnter(i)}
                             >
                                 {char}
                             </span>
@@ -194,7 +196,7 @@ export default function SubtitleDisplay({
         );
     };
 
-    // ---------- RUBY RENDERER (pinyin directly above each Hanzi) ----------
+    // ---------- RUBY RENDERER ----------
     const renderRubyLine = (hanziEvents: ASSEvent[], pinyinEvents: ASSEvent[]) => {
         const hanziText = hanziEvents.map(e => e.cleanText).join('');
         const pinyinText = pinyinEvents.map(e => e.cleanText).join(' ');
@@ -208,8 +210,7 @@ export default function SubtitleDisplay({
 
         return (
             <div
-                className="flex flex-nowrap justify-center text-center transition-all duration-300 animate-in fade-in slide-in-from-bottom-1 text-white"
-                onPointerMove={handlePointerMove}
+                className="flex flex-nowrap justify-center text-center transition-all duration-300 animate-in fade-in slide-in-from-bottom-1 text-white touch-none select-none"
                 onPointerUp={() => handlePointerUp(hanziText)}
                 onPointerLeave={() => {
                     if (isSelecting.current) handlePointerUp(hanziText);
@@ -234,17 +235,14 @@ export default function SubtitleDisplay({
                                 </span>
                             )}
                             <span
-                                data-char-index={i}
-                                onPointerDown={e => {
-                                    e.currentTarget.releasePointerCapture(e.pointerId);
-                                    handlePointerDown(i);
-                                }}
                                 className={clsx(
-                                    'cursor-pointer inline-block px-1 rounded text-5xl md:text-6xl font-bold tracking-widest transition-all duration-150',
+                                    'cursor-pointer inline-block px-1 rounded text-5xl md:text-6xl font-bold tracking-widest transition-all duration-150 touch-none',
                                     isSelected
                                         ? 'bg-emerald-500/30 text-emerald-300 scale-110'
-                                        : 'hover:bg-white/10 active:scale-95'
+                                        : 'active:scale-95'
                                 )}
+                                onPointerDown={(e) => handlePointerDown(i, e)}
+                                onPointerEnter={() => handlePointerEnter(i)}
                             >
                                 {char}
                             </span>
@@ -264,13 +262,12 @@ export default function SubtitleDisplay({
 
     return (
         <div
-            // ref={containerRef} // Removed as per diff
             className={clsx(
-                'flex flex-col items-center justify-center p-4 min-h-[100px] transition-all duration-500 space-y-2 rounded-xl', // Added rounded-xl as per diff
-                bgStyle, // Added bgStyle as per diff
+                'flex flex-col items-center justify-center p-4 min-h-[100px] transition-all duration-500 space-y-2 rounded-xl',
+                bgStyle,
                 className
             )}
-            style={{ // Added style prop as per diff
+            style={{
                 transform: `scale(${scale}) translateY(${verticalOffset}px)`,
                 transformOrigin: 'bottom center'
             }}

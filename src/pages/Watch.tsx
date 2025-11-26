@@ -229,10 +229,27 @@ export default function WatchPage() {
     if (parser) {
       const active = parser.getActiveSubtitlesByStyle(currentTime - subtitleOffset);
       const keys = Object.keys(active);
-      const hanziKey = keys.find(k => k.toLowerCase().includes('hanzi')) || keys.find(k => k.toLowerCase().includes('chinese'));
 
-      if (hanziKey && active[hanziKey].length > 0) {
-        const text = active[hanziKey].map(e => e.cleanText).join(' ');
+      // FIX: Content Detection instead of Style Name Detection
+      // Look through ALL active lines to find one with Hanzi characters
+      let hanziText = '';
+
+      for (const key of keys) {
+        const text = active[key].map(e => e.cleanText).join(' ');
+        // Check for Chinese characters Unicode range
+        if (/[\u4e00-\u9fff]/.test(text)) {
+          hanziText = text;
+          break; // Found it
+        }
+      }
+
+      if (hanziText) {
+        setXRayContent(hanziText);
+        setIsPlaying(false); // Pause when analyzing
+        if (playerRef.current) playerRef.current.pause();
+      } else if (keys.length > 0) {
+        // Fallback: If no Hanzi found, grab the first available text (might be English)
+        const text = active[keys[0]].map(e => e.cleanText).join(' ');
         setXRayContent(text);
         setIsPlaying(false);
         if (playerRef.current) playerRef.current.pause();
@@ -252,7 +269,7 @@ export default function WatchPage() {
         playerRef.current.pause();
       } else {
         playerRef.current.play();
-        setXRayContent(null);
+        setXRayContent(null); // Clear X-Ray on play
       }
       setIsPlaying(!isPlaying);
     }
@@ -433,9 +450,9 @@ export default function WatchPage() {
               currentTime={currentTime - subtitleOffset}
               className="w-full max-w-3xl mx-auto origin-top"
               onCharacterSelect={handleCharacterSelect}
-              scale={subScale}
-              verticalOffset={subVerticalOffset}
-              backgroundMode={subBackground}
+              scale={1}
+              verticalOffset={0}
+              backgroundMode="none"
             />
           </div>
 
