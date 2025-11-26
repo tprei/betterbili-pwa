@@ -1,19 +1,25 @@
-import { Volume2, Info, Timer } from 'lucide-react';
+import { Volume2, Info, Timer, Settings2 } from 'lucide-react';
 import clsx from 'clsx';
+import SubtitleTimeline from './SubtitleTimeline';
+import ASSParser from '../../lib/ass-parser';
 
 interface PlayerControlsProps {
     currentTime: number;
     duration: number; // In seconds
+    parser: ASSParser | null;
     onSeek: (time: number) => void;
     onSyncClick?: () => void;
+    onAppearanceClick?: () => void;
     className?: string;
 }
 
 export default function PlayerControls({
     currentTime,
     duration,
+    parser,
     onSeek,
     onSyncClick,
+    onAppearanceClick,
     className
 }: PlayerControlsProps) {
     const formatTime = (seconds: number) => {
@@ -48,6 +54,14 @@ export default function PlayerControls({
                 />
             </div>
 
+            {/* Subtitle Timeline */}
+            <div className="w-full px-0.5">
+                <SubtitleTimeline
+                    parser={parser}
+                    currentTime={currentTime}
+                />
+            </div>
+
             {/* Controls Row */}
             <div className="flex items-center justify-between">
                 {/* Time Display */}
@@ -56,13 +70,20 @@ export default function PlayerControls({
                 </div>
 
                 {/* Right Side Actions */}
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-1">
                     <button
                         onClick={onSyncClick}
                         className="p-2 text-zinc-400 hover:text-white transition-colors"
                         aria-label="Subtitle Sync"
                     >
                         <Timer size={18} />
+                    </button>
+                    <button
+                        onClick={onAppearanceClick}
+                        className="p-2 text-zinc-400 hover:text-white transition-colors"
+                        aria-label="Subtitle Appearance"
+                    >
+                        <Settings2 size={18} />
                     </button>
                     <button
                         className="p-2 text-zinc-400 hover:text-white transition-colors"

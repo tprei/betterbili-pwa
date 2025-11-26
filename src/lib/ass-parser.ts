@@ -445,42 +445,160 @@ class ASSParser {
         };
     }
     /**
+     * Deduplicate events that start at the same time
+     */
+    private dedupeEventsByStart(events: ASSEvent[]): ASSEvent[] {
+        const result: ASSEvent[] = [];
+        let lastStart: number | null = null;
+        for (const event of events) {
+            const start = event.startTime;
+            if (start === null || !Number.isFinite(start)) continue;
+
+            if (lastStart !== null && Math.abs(start - lastStart) < 1e-3) {
+                continue;
+            }
+            result.push(event);
+            lastStart = start;
+        }
+        return result;
+    }
+
+    /**
+     * Normalize event text for comparison
+     */
+    private normalizeEventText(event: ASSEvent): string {
+        if (!event) return '';
+        const text = event.cleanText || '';
+        return text.replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    /**
+     * Merge adjacent events with same text
+     */
+    private mergeAdjacentDuplicateEvents(events: ASSEvent[]): ASSEvent[] {
+        if (!events.length) return [];
+
+        const merged: ASSEvent[] = [];
+        const duplicateMergeWindowSeconds = 0.18;
+
+        for (const event of events) {
+            const normalizedText = this.normalizeEventText(event);
+            if (!normalizedText) continue;
+
+            const clone = { ...event };
+            const start = clone.startTime;
+            const end = clone.endTime;
+
+            if (start === null || end === null || end <= start) continue;
+
+            const last = merged[merged.length - 1];
+            if (last) {
+                const lastText = this.normalizeEventText(last);
+                const lastEnd = last.endTime || 0;
+                const gap = start - lastEnd;
+                const overlaps = start <= lastEnd;
+
+                if (lastText && lastText === normalizedText && (overlaps || (gap >= 0 && gap <= duplicateMergeWindowSeconds))) {
+                    const extendedEnd = Math.max(lastEnd, end);
+                    last.endTime = extendedEnd;
+                    continue;
+                }
+            }
+
+            merged.push(clone);
+        }
+
+        return merged;
+    }
+
+    /**
+     * Helper to find the "Main" track (usually Mandarin/Chinese)
+     */
+    private resolvePreferredStyle(): string | null {
+        const styles = this.getAvailableStyles();
+        if (!styles.length) return null;
+
+        // Priority list for the "Main" timeline track
+        const preferredOrder = ['Mandarin', 'Chinese', 'Mandarin Simplified', 'Chinese Simplified', 'CHS', 'Default'];
+
+        for (const candidate of preferredOrder) {
+            const match = styles.find(style => style.toLowerCase() === candidate.toLowerCase());
+            if (match) return match;
+        }
+
+        return styles[0];
+    }
+
+    /**
+     * Get processed events for navigation (deduped and merged)
+     * Filters by style BEFORE merging to prevent track interference
+     */
+    getNavigableEvents(requestedStyle?: string): ASSEvent[] {
+        if (!this.parsed) return [];
+
+        const targetStyle = requestedStyle || this.resolvePreferredStyle();
+
+        // 1. Filter raw events by the specific style first
+        let filteredEvents = this.events;
+        if (targetStyle) {
+            filteredEvents = this.events.filter(e => e.Style === targetStyle);
+        }
+
+        // 2. Filter out empty text
+        const validEvents = filteredEvents.filter(e => e.cleanText);
+
+        // 3. Dedupe by start time (removes accidental double-layers in the same track)
+        const deduped = this.dedupeEventsByStart(validEvents);
+
+        // 4. Merge split segments (e.g. "Hello..." + "...World" -> "Hello... ...World")
+        return this.mergeAdjacentDuplicateEvents(deduped);
+    }
+
+    /**
      * Get the start time of the next dialogue event relative to current time
+     * Uses merged events to avoid micro-segment jumps
      * @param currentTime - Current video time in seconds
      * @returns Start time of next event or null if none
      */
     getNextEventTime(currentTime: number): number | null {
-        if (!this.parsed || this.events.length === 0) return null;
+        const events = this.getNavigableEvents();
+        if (events.length === 0) return null;
 
-        // Find the first event that starts after the current time + buffer
-        // Buffer prevents getting the same event if we're slightly off
         const buffer = 0.05;
-        const nextEvent = this.events.find(e => (e.startTime || 0) > currentTime + buffer);
+        const nextEvent = events.find(e => (e.startTime || 0) > currentTime + buffer);
 
         return nextEvent ? nextEvent.startTime : null;
     }
 
     /**
      * Get the start time of the previous dialogue event relative to current time
+     * Uses merged events to avoid micro-segment jumps
      * @param currentTime - Current video time in seconds
      * @returns Start time of previous event or null if none
      */
     getPrevEventTime(currentTime: number): number | null {
-        if (!this.parsed || this.events.length === 0) return null;
+        const events = this.getNavigableEvents();
+        if (events.length === 0) return null;
 
-        // Find the last event that starts before the current time - buffer
         const buffer = 0.05;
 
         // Iterate backwards
-        for (let i = this.events.length - 1; i >= 0; i--) {
-            const event = this.events[i];
+        for (let i = events.length - 1; i >= 0; i--) {
+            const event = events[i];
             if ((event.startTime || 0) < currentTime - buffer) {
                 return event.startTime;
             }
         }
 
-        // No previous event → signal "nothing" instead of forcing ts 0
         return null;
+    }
+
+    /**
+     * Get all parsed events
+     * @returns Array of all ASSEvents
+     */
+    getEvents(): ASSEvent[] {
+        return this.events;
     }
 }
 

@@ -19,6 +19,9 @@ export default function WatchPage() {
   const playerRef = useRef<CustomVideoPlayerRef>(null);
   const isGestureProcessing = useRef(false); // Debounce gestures
 
+  // Loop State: Persist the start/end of the sentence being looped
+  const loopTargetRef = useRef<{ start: number; end: number } | null>(null);
+
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -26,6 +29,13 @@ export default function WatchPage() {
   const [xRayContent, setXRayContent] = useState<string | null>(null);
   const [subtitleOffset, setSubtitleOffset] = useState(0);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isLoopingSentence, setIsLoopingSentence] = useState(false); // Loop state UI flag
+
+  // Subtitle Appearance State
+  const [subScale, setSubScale] = useState(1);
+  const [subVerticalOffset, setSubVerticalOffset] = useState(0); // pixels
+  const [subBackground, setSubBackground] = useState<'none' | 'blur' | 'opaque'>('none');
+  const [isAppearanceModalOpen, setIsAppearanceModalOpen] = useState(false);
 
   // Load subtitles from API
   useEffect(() => {
@@ -94,11 +104,14 @@ export default function WatchPage() {
     setXRayContent(null);
   };
 
-  const handleNextSentence = () => {
-    // Debounce: If we just swiped, ignore for 300ms
-    if (isGestureProcessing.current || !parser || !playerRef.current) return;
-    isGestureProcessing.current = true;
-    setTimeout(() => isGestureProcessing.current = false, 300);
+  // Modified: Accepts 'force' to bypass debounce for rapid seeking
+  const handleNextSentence = (force = false) => {
+    if ((isGestureProcessing.current && !force) || !parser || !playerRef.current) return;
+
+    if (!force) {
+      isGestureProcessing.current = true;
+      setTimeout(() => isGestureProcessing.current = false, 300);
+    }
 
     const player = playerRef.current;
     const currentVideoTime = player.getCurrentTime();
@@ -113,11 +126,14 @@ export default function WatchPage() {
     }
   };
 
-  const handlePrevSentence = () => {
-    // Debounce
-    if (isGestureProcessing.current || !parser || !playerRef.current) return;
-    isGestureProcessing.current = true;
-    setTimeout(() => isGestureProcessing.current = false, 300);
+  // Modified: Accepts 'force' to bypass debounce for rapid seeking
+  const handlePrevSentence = (force = false) => {
+    if ((isGestureProcessing.current && !force) || !parser || !playerRef.current) return;
+
+    if (!force) {
+      isGestureProcessing.current = true;
+      setTimeout(() => isGestureProcessing.current = false, 300);
+    }
 
     const player = playerRef.current;
     const currentVideoTime = player.getCurrentTime();
@@ -147,17 +163,78 @@ export default function WatchPage() {
     }
   };
 
+  const onPlayerTimeUpdate = (time: number) => {
+    setCurrentTime(time);
+
+    // FIXED LOOP LOGIC: Check against the saved loop target, not current active subs
+    if (isLoopingSentence && loopTargetRef.current && playerRef.current) {
+      const queryTime = time - subtitleOffset;
+      const { start, end } = loopTargetRef.current;
+
+      // If we passed the end of the sentence (with small buffer), seek back to start
+      if (queryTime > end + 0.15) {
+        executeSeekAndPlay(start + subtitleOffset);
+      }
+    }
+  };
+
+  const handleLoopStart = () => {
+    if (!playerRef.current || !parser) return;
+
+    const currentVideoTime = playerRef.current.getCurrentTime();
+    const queryTime = currentVideoTime - subtitleOffset;
+
+    // 1. Try to find active subtitle
+    const activeSubs = parser.getActiveSubtitles(queryTime);
+    let targetSub = activeSubs.length > 0
+      ? activeSubs.sort((a, b) => (b.startTime || 0) - (a.startTime || 0))[0]
+      : null;
+
+    // 2. If no active subtitle (we are in a gap), find the previous one
+    if (!targetSub) {
+      const events = parser.getEvents();
+      // Iterate backwards to find the nearest previous event
+      for (let i = events.length - 1; i >= 0; i--) {
+        const ev = events[i];
+        if ((ev.endTime || 0) < queryTime) {
+          targetSub = ev;
+          break;
+        }
+      }
+    }
+
+    // 3. Start Looping
+    if (targetSub && targetSub.startTime !== null && targetSub.endTime !== null) {
+      setIsLoopingSentence(true);
+      loopTargetRef.current = { start: targetSub.startTime, end: targetSub.endTime };
+      executeSeekAndPlay(targetSub.startTime + subtitleOffset);
+    } else {
+      // Fallback if no subtitles found at all: just mark state to prevent weirdness
+      setIsLoopingSentence(true);
+      loopTargetRef.current = { start: queryTime, end: queryTime + 5 }; // Mock loop
+    }
+  };
+
+  const handleLoopEnd = () => {
+    setIsLoopingSentence(false);
+    loopTargetRef.current = null;
+  };
+
+  const handleRapidSeek = (direction: 'next' | 'prev') => {
+    if (direction === 'next') handleNextSentence(true);
+    else handlePrevSentence(true);
+  };
+
   const handleAnalyze = () => {
     if (parser) {
       const active = parser.getActiveSubtitlesByStyle(currentTime - subtitleOffset);
-      // Try to find Hanzi content
       const keys = Object.keys(active);
       const hanziKey = keys.find(k => k.toLowerCase().includes('hanzi')) || keys.find(k => k.toLowerCase().includes('chinese'));
 
       if (hanziKey && active[hanziKey].length > 0) {
         const text = active[hanziKey].map(e => e.cleanText).join(' ');
         setXRayContent(text);
-        setIsPlaying(false); // Pause when analyzing
+        setIsPlaying(false);
         if (playerRef.current) playerRef.current.pause();
       }
     }
@@ -175,7 +252,7 @@ export default function WatchPage() {
         playerRef.current.pause();
       } else {
         playerRef.current.play();
-        setXRayContent(null); // Clear X-Ray on play
+        setXRayContent(null);
       }
       setIsPlaying(!isPlaying);
     }
@@ -235,11 +312,74 @@ export default function WatchPage() {
         </div>
       )}
 
-      {/* 
-        Responsive Layout Strategy:
-        - Portrait: Flex Column (Video -> Controls -> Subtitles -> Info -> Trackpad)
-        - Landscape: Grid (Left: Video/Subs, Right: Info/Trackpad)
-      */}
+      {/* Appearance Modal Overlay */}
+      {isAppearanceModalOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-80 shadow-2xl flex flex-col">
+            <h3 className="text-lg font-bold text-white mb-6 text-center">Subtitle Appearance</h3>
+
+            {/* Size Control */}
+            <div className="mb-6">
+              <div className="flex justify-between text-xs text-zinc-400 mb-2 uppercase tracking-wider font-medium">
+                <span>Size</span>
+                <span>{Math.round(subScale * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={subScale}
+                onChange={(e) => setSubScale(parseFloat(e.target.value))}
+                className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+            </div>
+
+            {/* Vertical Position Control */}
+            <div className="mb-6">
+              <div className="flex justify-between text-xs text-zinc-400 mb-2 uppercase tracking-wider font-medium">
+                <span>Vertical Position</span>
+                <span>{subVerticalOffset}px</span>
+              </div>
+              <input
+                type="range"
+                min="-200"
+                max="200"
+                step="10"
+                value={subVerticalOffset}
+                onChange={(e) => setSubVerticalOffset(parseInt(e.target.value))}
+                className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+            </div>
+
+            {/* Background Control */}
+            <div className="mb-8">
+              <div className="text-xs text-zinc-400 mb-2 uppercase tracking-wider font-medium">Background</div>
+              <div className="flex bg-zinc-800 rounded-lg p-1">
+                {(['none', 'blur', 'opaque'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setSubBackground(mode)}
+                    className={clsx(
+                      "flex-1 py-1.5 text-xs font-medium rounded-md transition-all capitalize",
+                      subBackground === mode ? "bg-zinc-600 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                    )}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsAppearanceModalOpen(false)}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-bold text-white transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col landscape:grid landscape:grid-cols-[1fr_280px] landscape:grid-rows-1 overflow-hidden min-h-0">
 
@@ -247,18 +387,30 @@ export default function WatchPage() {
         <div className="flex flex-col flex-1 min-h-0 relative overflow-hidden">
 
           {/* Video Player Area */}
-          {/* In landscape, we want this to take maximum space. In portrait, it's aspect-video. */}
-          <div className="w-full bg-black relative shrink-0 landscape:flex-1 landscape:min-h-0 flex items-center justify-center">
+          <div className="w-full bg-black relative shrink-0 landscape:flex-1 landscape:min-h-0 flex items-center justify-center group">
             <div className="w-full aspect-video landscape:aspect-auto landscape:h-full relative">
               <CustomVideoPlayer
                 ref={playerRef}
                 src={videoUrl ? `${import.meta.env.VITE_API_URL || '/api/v1'}/video/stream?url=${encodeURIComponent(videoUrl)}` : ''}
                 className="w-full h-full object-contain max-h-[60vh] landscape:max-h-full"
-                onTimeUpdate={setCurrentTime}
+                onTimeUpdate={onPlayerTimeUpdate}
                 onDurationChange={setDuration}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
               />
+
+              {/* Mobile Landscape Overlay Subtitles */}
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 hidden landscape:block lg:hidden pointer-events-none">
+                <SubtitleDisplay
+                  parser={parser}
+                  currentTime={currentTime - subtitleOffset}
+                  className="w-max mx-auto origin-bottom pointer-events-auto drop-shadow-md rounded-xl scale-50"
+                  onCharacterSelect={handleCharacterSelect}
+                  scale={subScale}
+                  verticalOffset={subVerticalOffset}
+                  backgroundMode={subBackground}
+                />
+              </div>
             </div>
           </div>
 
@@ -267,26 +419,28 @@ export default function WatchPage() {
             <PlayerControls
               currentTime={currentTime}
               duration={duration}
+              parser={parser}
               onSeek={(t) => handleSeek(t, false)}
               onSyncClick={() => setIsSyncModalOpen(true)}
+              onAppearanceClick={() => setIsAppearanceModalOpen(true)}
             />
           </div>
 
-          {/* Subtitles Area */}
-          {/* Reduced padding to save space */}
-          <div className="w-full px-3 py-0.5 z-20 shrink-0">
+          {/* Subtitles Area (Portrait & Desktop Landscape) */}
+          <div className="w-full px-3 py-0.5 z-20 shrink-0 block landscape:hidden lg:block">
             <SubtitleDisplay
               parser={parser}
               currentTime={currentTime - subtitleOffset}
-              className="w-full max-w-3xl mx-auto scale-75 origin-top"
+              className="w-full max-w-3xl mx-auto origin-top"
               onCharacterSelect={handleCharacterSelect}
-              isPaused={!isPlaying}
+              scale={subScale}
+              verticalOffset={subVerticalOffset}
+              backgroundMode={subBackground}
             />
           </div>
 
-          {/* Portrait: Character Info + Trackpad, stuck to bottom */}
+          {/* Portrait: Character Info + Trackpad */}
           <div className="hidden portrait:flex flex-1 flex-col min-h-0">
-            {/* Character info area (simple div, fills remaining space) */}
             <div className="flex-1 flex items-center justify-center overflow-hidden min-h-[80px]">
               {xRayContent ? (
                 <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
@@ -302,7 +456,6 @@ export default function WatchPage() {
               )}
             </div>
 
-            {/* Trackpad at the very bottom */}
             <div className="w-full shrink-0 pb-6">
               <div className="w-full h-32 relative group mx-auto max-w-md px-2">
                 <GestureTrackpad
@@ -310,7 +463,9 @@ export default function WatchPage() {
                   onPrevSentence={handlePrevSentence}
                   onAnalyze={handleAnalyze}
                   onTogglePlay={handleTogglePlay}
-                  onLongPress={handleAnalyze}
+                  onLoopStart={handleLoopStart}
+                  onLoopEnd={handleLoopEnd}
+                  onRapidSeek={handleRapidSeek}
                   className="w-full h-full shadow-lg ring-1 ring-white/5"
                 />
                 <p className="absolute -bottom-5 left-0 right-0 text-center text-[8px] text-zinc-500 font-medium uppercase tracking-wider">
@@ -323,8 +478,6 @@ export default function WatchPage() {
 
         {/* RIGHT COLUMN (Landscape Only) */}
         <div className="hidden landscape:flex flex-col border-l border-zinc-800 bg-zinc-900/30 h-full w-[280px]">
-
-          {/* Top Right: Character Info Display */}
           <div className="flex-1 p-4 border-b border-zinc-800/50 flex flex-col items-center justify-center text-zinc-500">
             {xRayContent ? (
               <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 text-center">
@@ -343,7 +496,6 @@ export default function WatchPage() {
             )}
           </div>
 
-          {/* Bottom Right: Trackpad */}
           <div className="h-[200px] p-4 bg-zinc-950/30">
             <div className="w-full h-full relative group">
               <GestureTrackpad
@@ -351,7 +503,9 @@ export default function WatchPage() {
                 onPrevSentence={handlePrevSentence}
                 onAnalyze={handleAnalyze}
                 onTogglePlay={handleTogglePlay}
-                onLongPress={handleAnalyze}
+                onLoopStart={handleLoopStart}
+                onLoopEnd={handleLoopEnd}
+                onRapidSeek={handleRapidSeek}
                 className="w-full h-full shadow-inner ring-1 ring-white/5"
               />
             </div>

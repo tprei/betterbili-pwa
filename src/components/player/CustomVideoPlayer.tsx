@@ -34,9 +34,9 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     // NEW: A secondary guard to ignore updates for a split second after seeking
     const ignoreUpdatesRef = useRef(false);
 
-    const [videoStreamUrl, setVideoStreamUrl] = useState<string | null>(null);
-    const [audioStreamUrl, setAudioStreamUrl] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [videoSrc, setVideoSrc] = useState<string | null>(null);
+    const [audioSrc, setAudioSrc] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true); // Start loading by default
     const [error, setError] = useState<string | null>(null);
 
     useImperativeHandle(ref, () => ({
@@ -73,7 +73,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
     useEffect(() => {
         const fetchStream = async () => {
             try {
-                setLoading(true);
+                setIsLoading(true);
                 setError(null);
                 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -84,21 +84,21 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
 
                 if (data.video_url) {
                     const proxyVideoUrl = `${apiUrl}/video/proxy?url=${encodeURIComponent(data.video_url)}`;
-                    setVideoStreamUrl(proxyVideoUrl);
+                    setVideoSrc(proxyVideoUrl);
                 }
 
                 if (data.audio_url) {
                     const proxyAudioUrl = `${apiUrl}/video/proxy?url=${encodeURIComponent(data.audio_url)}`;
-                    setAudioStreamUrl(proxyAudioUrl);
+                    setAudioSrc(proxyAudioUrl);
                 } else {
-                    setAudioStreamUrl(null);
+                    setAudioSrc(null);
                 }
 
             } catch (err) {
                 console.error('Error fetching stream:', err);
                 setError('Failed to load video. Please try again.');
             } finally {
-                setLoading(false);
+                // setIsLoading(false); // Will be set by canplay/playing events
             }
         };
 
@@ -106,15 +106,6 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             fetchStream();
         }
     }, [src]);
-
-    const togglePlay = () => {
-        if (!videoRef.current) return;
-        if (videoRef.current.paused) {
-            videoRef.current.play();
-        } else {
-            videoRef.current.pause();
-        }
-    };
 
     // -------------------------------------------------------------------------
     // EVENT HANDLERS
@@ -165,6 +156,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         // BROWSER SAYS: "I am starting to seek"
         const handleSeeking = () => {
             isSeekingRef.current = true;
+            setIsLoading(true); // Show loading during seeking
         };
 
         const handleSeeked = () => {
@@ -173,6 +165,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
 
             // 2. Unlock seeking flag
             isSeekingRef.current = false;
+            setIsLoading(false); // Hide loading after seeked
 
             // 3. Set a temporary guard against "Ghost" 0-time updates
             // Some browsers fire a timeUpdate=0 immediately after seeking before the real time.
@@ -187,11 +180,18 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         // BROWSER SAYS: "I am waiting for data" (Buffering)
         const handleWaiting = () => {
             audio?.pause();
+            setIsLoading(true);
+        };
+
+        const handleCanPlay = () => {
+            setIsLoading(false);
         };
 
         // BROWSER SAYS: "I have data again"
         const handlePlaying = () => {
+            setIsLoading(false);
             if (!video.paused) audio?.play().catch(() => { });
+            onPlay?.(); // Call onPlay here as well, as playing implies play
         };
 
         video.addEventListener('play', handlePlay);
@@ -200,6 +200,7 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
         video.addEventListener('seeked', handleSeeked);
         video.addEventListener('waiting', handleWaiting);
         video.addEventListener('playing', handlePlaying);
+        video.addEventListener('canplay', handleCanPlay);
 
         return () => {
             video.removeEventListener('play', handlePlay);
@@ -208,12 +209,13 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
             video.removeEventListener('seeked', handleSeeked);
             video.removeEventListener('waiting', handleWaiting);
             video.removeEventListener('playing', handlePlaying);
+            video.removeEventListener('canplay', handleCanPlay);
         };
-    }, [onPlay, onPause, onTimeUpdate, audioStreamUrl]);
+    }, [onPlay, onPause, onTimeUpdate, onDurationChange, audioSrc]); // Added onDurationChange and audioSrc to dependencies
 
     return (
         <div className={clsx("relative bg-black w-full h-full flex items-center justify-center overflow-hidden", className)}>
-            {loading && (
+            {isLoading && ( // Changed from 'loading' to 'isLoading'
                 <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/50 z-10">
                     <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
                 </div>
@@ -227,22 +229,21 @@ const CustomVideoPlayer = forwardRef<CustomVideoPlayerRef, CustomVideoPlayerProp
                 </div>
             )}
 
-            {videoStreamUrl && (
+            {videoSrc && ( // Changed from 'videoStreamUrl' to 'videoSrc'
                 <video
                     ref={videoRef}
-                    src={videoStreamUrl}
+                    src={videoSrc} // Changed from 'videoStreamUrl' to 'videoSrc'
                     className="absolute inset-0 w-full h-full object-contain"
                     playsInline
                     controls={false}
-                    onClick={togglePlay}
                     onTimeUpdate={handleTimeUpdate}
                     onDurationChange={handleDurationChange}
-                    muted={!!audioStreamUrl}
+                    muted={!!audioSrc}
                 />
             )}
 
-            {audioStreamUrl && (
-                <audio ref={audioRef} src={audioStreamUrl} className="hidden" />
+            {audioSrc && (
+                <audio ref={audioRef} src={audioSrc} className="hidden" />
             )}
         </div>
     );
