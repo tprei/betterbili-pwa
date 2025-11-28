@@ -130,11 +130,11 @@ export default function SubtitleDisplay({
         let styleClass = 'text-base text-zinc-100 font-medium whitespace-nowrap';
 
         if (type === 'english') {
-            styleClass = 'text-lg md:text-xl text-zinc-100 whitespace-nowrap font-medium';
+            styleClass = 'text-lg md:text-xl text-zinc-100 whitespace-normal font-medium max-w-[90vw]';
         } else if (type === 'pinyin') {
-            styleClass = 'text-sm md:text-base text-zinc-100 tracking-wide whitespace-nowrap';
+            styleClass = 'text-sm md:text-base text-zinc-100 tracking-wide whitespace-normal max-w-[90vw]';
         } else if (type === 'hanzi') {
-            styleClass = 'text-3xl md:text-6xl font-bold text-white tracking-widest whitespace-nowrap';
+            styleClass = 'text-3xl md:text-6xl font-bold text-white tracking-widest whitespace-normal max-w-[90vw]';
         }
 
         const isHanzi = type === 'hanzi';
@@ -210,7 +210,7 @@ export default function SubtitleDisplay({
 
         return (
             <div
-                className="flex flex-nowrap justify-center text-center transition-all duration-300 animate-in fade-in slide-in-from-bottom-1 text-white touch-none select-none"
+                className="flex flex-wrap justify-center text-center transition-all duration-300 animate-in fade-in slide-in-from-bottom-1 text-white touch-none select-none max-w-full"
                 onPointerUp={() => handlePointerUp(hanziText)}
                 onPointerLeave={() => {
                     if (isSelecting.current) handlePointerUp(hanziText);
@@ -236,7 +236,7 @@ export default function SubtitleDisplay({
                             )}
                             <span
                                 className={clsx(
-                                    'cursor-pointer inline-block px-1 rounded text-5xl md:text-6xl font-bold tracking-widest transition-all duration-150 touch-none',
+                                    'cursor-pointer inline-block px-1 rounded text-4xl md:text-6xl font-bold tracking-widest transition-all duration-150 touch-none',
                                     isSelected
                                         ? 'bg-emerald-500/30 text-emerald-300 scale-110'
                                         : 'active:scale-95'

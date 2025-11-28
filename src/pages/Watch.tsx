@@ -5,6 +5,7 @@ import type { CustomVideoPlayerRef } from '../components/player/CustomVideoPlaye
 import SubtitleDisplay from '../components/player/SubtitleDisplay';
 import GestureTrackpad from '../components/player/GestureTrackpad';
 import PlayerControls from '../components/player/PlayerControls';
+import HanziWriterBoard from '../components/player/HanziWriterBoard';
 import ASSParser from '../lib/ass-parser';
 import clsx from 'clsx';
 import { useAuth } from '../contexts/AuthContext';
@@ -460,8 +461,11 @@ export default function WatchPage() {
           <div className="hidden portrait:flex flex-1 flex-col min-h-0">
             <div className="flex-1 flex items-center justify-center overflow-hidden min-h-[80px]">
               {xRayContent ? (
-                <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
-                  <div className="text-4xl font-bold text-white mb-2">{xRayContent}</div>
+                <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 w-full">
+                  <HanziWriterBoard
+                    text={xRayContent}
+                    className="mb-2"
+                  />
                   <div className="text-xs text-zinc-500 uppercase tracking-widest">X-Ray Analysis</div>
                 </div>
               ) : (
@@ -495,10 +499,12 @@ export default function WatchPage() {
 
         {/* RIGHT COLUMN (Landscape Only) */}
         <div className="hidden landscape:flex flex-col border-l border-zinc-800 bg-zinc-900/30 h-full w-[280px]">
-          <div className="flex-1 p-4 border-b border-zinc-800/50 flex flex-col items-center justify-center text-zinc-500">
+          <div className="flex-1 p-4 border-b border-zinc-800/50 flex flex-col items-center justify-center text-zinc-500 overflow-hidden">
             {xRayContent ? (
-              <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 text-center">
-                <div className="text-6xl font-bold text-white mb-4">{xRayContent}</div>
+              <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 text-center w-full">
+                <div className="mb-4 scale-75 origin-center">
+                  <HanziWriterBoard text={xRayContent} />
+                </div>
                 <div className="text-xs text-zinc-500 uppercase tracking-widest">X-Ray Analysis</div>
               </div>
             ) : (
