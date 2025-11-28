@@ -86,7 +86,7 @@ function buildQueryString(params: CatalogSearchParams): string {
 
         if (Array.isArray(value)) {
             if (value.length > 0) {
-                searchParams.append(key, value.join(','));
+                value.forEach(v => searchParams.append(key, String(v)));
             }
         } else {
             searchParams.append(key, String(value));

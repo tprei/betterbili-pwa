@@ -1,16 +1,15 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CatalogGrid } from "../components/catalog/CatalogGrid";
+import { CatalogControls } from "../components/catalog/CatalogControls";
 import type {
     CatalogFilters,
     CatalogResponse,
     CatalogItem,
-    SortOption,
-    HSKLevel
+    SortOption
 } from "../types/catalog";
 import { searchCatalog } from "../lib/catalog-api";
 import { Search, RefreshCw } from "lucide-react";
-import clsx from "clsx";
 
 export default function Home() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -93,11 +92,6 @@ export default function Home() {
         }
     };
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        // Trigger fetch via useEffect dependency
-    };
-
     return (
         <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-8 pb-24">
             <div className="max-w-7xl mx-auto space-y-8">
@@ -108,41 +102,13 @@ export default function Home() {
                         <h1 className="text-3xl font-bold text-white mb-1">Discover</h1>
                         <p className="text-zinc-400">Learn Chinese with authentic videos</p>
                     </div>
-
-                    {/* Search Bar */}
-                    <form onSubmit={handleSearch} className="relative w-full md:w-96">
-                        <input
-                            type="text"
-                            placeholder="Search videos, channels..."
-                            value={filters.query}
-                            onChange={(e) => setFilters(prev => ({ ...prev, query: e.target.value }))}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
-                        />
-                        <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-zinc-500" />
-                    </form>
                 </div>
 
-                {/* Filters (Simplified for now) */}
-                <div className="flex overflow-x-auto pb-2 gap-2 scrollbar-hide">
-                    {['All', 'HSK 1-2', 'HSK 3-4', 'HSK 5-6'].map((label, i) => (
-                        <button
-                            key={label}
-                            onClick={() => {
-                                const newDifficulty = i === 0 ? [] : i === 1 ? [1, 2] : i === 2 ? [3, 4] : [5, 6];
-                                setFilters(prev => ({ ...prev, difficulty: newDifficulty as HSKLevel[] }));
-                            }}
-                            className={clsx(
-                                "px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors border",
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                (i === 0 && filters.difficulty.length === 0) || (i > 0 && filters.difficulty.includes(i * 2 as any))
-                                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-200"
-                            )}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
+                {/* New Controls */}
+                <CatalogControls
+                    filters={filters}
+                    onFilterChange={(newFilters) => setFilters(prev => ({ ...prev, ...newFilters }))}
+                />
 
                 {/* Content */}
                 {loading ? (
