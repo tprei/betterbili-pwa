@@ -194,30 +194,30 @@ export const CatalogCard = ({ item }: CatalogCardProps) => {
                 </div>
 
                 {/* Card Content */}
-                <div className="p-4 space-y-3 flex-1 flex flex-col">
+                <div className="p-2.5 space-y-2 flex-1 flex flex-col">
                     {/* Titles */}
-                    <div className="space-y-1 flex-1">
-                        <h3 className="font-bold text-base leading-tight line-clamp-2 text-zinc-100 group-hover:text-white transition-colors">
+                    <div className="space-y-0.5 flex-1">
+                        <h3 className="font-bold text-sm leading-snug line-clamp-2 text-zinc-100 group-hover:text-white transition-colors">
                             {englishTitle}
                         </h3>
-                        <p className="text-xs text-zinc-400 line-clamp-2">
+                        <p className="text-[10px] text-zinc-400 line-clamp-1">
                             {item.title}
                         </p>
                     </div>
 
                     {/* Channel and Views */}
-                    <div className="text-xs text-zinc-500 flex items-center gap-2">
+                    <div className="text-[10px] text-zinc-500 flex items-center gap-1.5">
                         <span>{item.channel}</span>
                         <span>•</span>
                         <span>{formatViews(item.popularity?.views)} views</span>
                     </div>
 
                     {/* Enhanced Badges */}
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                         {/* Difficulty Level */}
                         {item.difficulty?.level && (
                             <div className={cn(
-                                "px-2 py-1 rounded-full text-xs font-medium border transition-all duration-200",
+                                "px-1.5 py-0.5 rounded-full text-[10px] font-medium border transition-all duration-200",
                                 difficultyColors[item.difficulty.level]
                             )}>
                                 {getHSKLevelLabel(item.difficulty.level)}
@@ -225,26 +225,26 @@ export const CatalogCard = ({ item }: CatalogCardProps) => {
                         )}
 
                         {/* Duration Bucket */}
-                        <div className="px-2 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        <div className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
                             {getDurationBucketLabel(item.duration_bucket)}
                         </div>
                     </div>
 
                     {/* NEW: Metadata Footer with HSK Coverage and Quality Indicators */}
-                    <div className="flex items-center justify-between mt-auto pt-3 border-t border-zinc-800">
+                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-zinc-800">
                         {/* HSK Coverage */}
                         {item.difficulty?.level && (
-                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-zinc-800/50 text-xs font-medium w-full max-w-[120px]">
-                                <BarChart2 className="w-3 h-3 opacity-70 text-zinc-400" />
-                                <StackedProgressBar data={hskCoverageGroups} className="flex-1" />
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800/50 text-[10px] font-medium w-full max-w-[100px]">
+                                <BarChart2 className="w-2.5 h-2.5 opacity-70 text-zinc-400" />
+                                <StackedProgressBar data={hskCoverageGroups} className="flex-1 h-1.5" />
                             </div>
                         )}
 
                         {/* Video Quality Indicator */}
                         {item.subtitle_quality?.tier && (
-                            <div className="flex items-center gap-1.5 opacity-80" title={qualityConfig.label}>
+                            <div className="flex items-center gap-1 opacity-80" title={qualityConfig.label}>
                                 <span className={qualityConfig.color}>
-                                    <QualityIconComponent className="w-4 h-4" />
+                                    <QualityIconComponent className="w-3.5 h-3.5" />
                                 </span>
                             </div>
                         )}

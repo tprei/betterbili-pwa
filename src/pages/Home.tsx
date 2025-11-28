@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CatalogGrid } from "../components/catalog/CatalogGrid";
 import { CatalogControls } from "../components/catalog/CatalogControls";
@@ -9,10 +9,12 @@ import type {
     SortOption
 } from "../types/catalog";
 import { searchCatalog } from "../lib/catalog-api";
+import { useAuth } from "../contexts/AuthContext";
 import { Search, RefreshCw } from "lucide-react";
 
 export default function Home() {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { session } = useAuth();
 
     // State
     const [data, setData] = useState<CatalogResponse | null>(null);
@@ -41,7 +43,7 @@ export default function Home() {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const response = await searchCatalog(filters, undefined, 24);
+                const response = await searchCatalog(filters, undefined, 5, session?.access_token);
                 setData(response);
                 setAllItems(response.items);
                 setHasMore(response.cursor !== undefined && !response.locked);
@@ -57,7 +59,7 @@ export default function Home() {
         };
 
         fetchData();
-    }, [filters]);
+    }, [filters, session?.access_token]);
 
     // Update search params when filters change
     useEffect(() => {
@@ -74,12 +76,12 @@ export default function Home() {
     }, [filters, setSearchParams]);
 
     // Load more items
-    const handleLoadMore = async () => {
+    const handleLoadMore = useCallback(async () => {
         if (!data || loadingMore || !hasMore || !data.cursor) return;
 
         setLoadingMore(true);
         try {
-            const response = await searchCatalog(filters, data.cursor, 24);
+            const response = await searchCatalog(filters, data.cursor, 5, session?.access_token);
 
             setAllItems(prev => [...prev, ...response.items]);
             setData(response);
@@ -90,7 +92,24 @@ export default function Home() {
         } finally {
             setLoadingMore(false);
         }
-    };
+    }, [data, loadingMore, hasMore, filters, session?.access_token]);
+
+    // Infinite scroll observer
+    const observer = useRef<IntersectionObserver | null>(null);
+    const lastElementRef = useCallback((node: HTMLDivElement) => {
+        if (loadingMore) return;
+        if (observer.current) observer.current.disconnect();
+
+        observer.current = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting) {
+                if (hasMore) {
+                    handleLoadMore();
+                }
+            }
+        });
+
+        if (node) observer.current.observe(node);
+    }, [loadingMore, hasMore, handleLoadMore]);
 
     return (
         <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 md:p-8 pb-24">
@@ -127,21 +146,21 @@ export default function Home() {
                     <>
                         <CatalogGrid
                             items={allItems}
-                            isAuthenticated={true} // Assume true for PWA for now
+                            isAuthenticated={!!session}
                         />
 
-                        {hasMore && (
-                            <div className="mt-12 text-center">
-                                <button
-                                    onClick={handleLoadMore}
-                                    disabled={loadingMore}
-                                    className="px-8 py-3 bg-zinc-800 text-white rounded-full hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 mx-auto"
-                                >
-                                    {loadingMore ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
-                                    {loadingMore ? "Loading..." : "Load more"}
-                                </button>
-                            </div>
-                        )}
+                        {/* Infinite Scroll Sentinel */}
+                        <div ref={lastElementRef} className="mt-8 h-10 flex items-center justify-center">
+                            {loadingMore && (
+                                <div className="flex items-center gap-2 text-zinc-500">
+                                    <RefreshCw className="w-5 h-5 animate-spin" />
+                                    <span className="text-sm">Loading more videos...</span>
+                                </div>
+                            )}
+                            {!hasMore && allItems.length > 0 && (
+                                <p className="text-zinc-600 text-sm">You've reached the end</p>
+                            )}
+                        </div>
                     </>
                 ) : (
                     <div className="text-center py-20">
