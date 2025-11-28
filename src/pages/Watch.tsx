@@ -459,14 +459,17 @@ export default function WatchPage() {
 
           {/* Portrait: Character Info + Trackpad */}
           <div className="hidden portrait:flex flex-1 flex-col min-h-0">
-            <div className="flex-1 flex items-center justify-center overflow-hidden min-h-[80px]">
+            {/* FIX: Increased min-h to prevent layout jumping when
+            switching between placeholder and HanziBoard
+        */}
+            <div className="flex-1 flex items-center justify-center overflow-hidden min-h-[140px] max-h-[200px]">
               {xRayContent ? (
-                <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 w-full">
+                // FIX: Removed 'zoom-in' to prevent proportion flashing
+                <div className="flex flex-col items-center justify-center animate-in fade-in duration-300 w-full">
                   <HanziWriterBoard
                     text={xRayContent}
-                    className="mb-2"
+                    className="mb-6" // Increased spacing to prevent overlap
                   />
-                  <div className="text-xs text-zinc-500 uppercase tracking-widest">X-Ray Analysis</div>
                 </div>
               ) : (
                 <div className="text-center opacity-30">
@@ -501,11 +504,11 @@ export default function WatchPage() {
         <div className="hidden landscape:flex flex-col border-l border-zinc-800 bg-zinc-900/30 h-full w-[280px]">
           <div className="flex-1 p-4 border-b border-zinc-800/50 flex flex-col items-center justify-center text-zinc-500 overflow-hidden">
             {xRayContent ? (
-              <div className="flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 text-center w-full">
+              // FIX: Removed 'zoom-in' to prevent proportion flashing
+              <div className="flex flex-col items-center justify-center animate-in fade-in duration-300 text-center w-full">
                 <div className="mb-4 scale-75 origin-center">
                   <HanziWriterBoard text={xRayContent} />
                 </div>
-                <div className="text-xs text-zinc-500 uppercase tracking-widest">X-Ray Analysis</div>
               </div>
             ) : (
               <>
